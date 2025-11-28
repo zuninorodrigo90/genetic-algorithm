@@ -1,26 +1,26 @@
 # Genetic Algorithm for Minimum Vertex Cover
 
 This project implements a **Genetic Algorithm (GA)** in Java to solve the **Minimum Vertex Cover** problem on arbitrary graphs.  
-The solution uses a bitstring representation, elitist selection, 2‑point crossover, bit‑flip mutation, and a fitness function composed of **two penalty-based areas**.
+The solution uses a bitstring representation, elitist selection, 2-point crossover, bit-flip mutation, and a fitness function composed of two penalty-based areas.
 
 ---
 
 ## Problem Overview
 
-Given a graph \(G = (V, E)\), a *vertex cover* is a set of vertices such that **every edge is incident to at least one selected vertex**.
+Given a graph \(G = (V, E)\), a *vertex cover* is a set of vertices such that **every edge has at least one endpoint that is included in the cover**.
 
-The objective of the *Minimum Vertex Cover* problem is:
+The objective of the Minimum Vertex Cover problem is:
 
-### **Find the smallest possible set of vertices covering all edges.**
+### 👉 Find the smallest possible set of vertices that covers all edges.
 
-This is an NP-hard optimization problem, which makes it ideal for metaheuristics such as Genetic Algorithms.
+This is NP-hard and cannot be solved exactly in polynomial time unless P = NP, making heuristic approaches highly valuable.
 
 ---
 
 ## Genetic Algorithm Design
 
 ### **Representation**
-Each individual is a list of bits (0/1) of length equal to the number of vertices:
+Each individual is a bit vector of length `NUM_VERTICES`:
 - `1` → vertex is included in the cover
 - `0` → vertex is not selected
 
@@ -31,44 +31,54 @@ Example:
 
 ## Fitness Function (Two Areas)
 
-Since the GA *maximizes* fitness but the VC problem is *minimization*, the fitness is implemented using **negative penalties**:
+Because GA maximizes fitness but we want to **minimize the cover**, fitness is negative:
 
 ### **Area 1: Uncovered edges penalty**
 ```
-area1 = -1000 * (# of uncovered edges)
+area1 = -PENALTY_UNCOVERED * (# of uncovered edges)
+```
+If both endpoints of an edge are 0 → UNRESOLVED → penalized heavily.
+
+### Area 2 — penalization of cover size:
+```
+area2 = -(cover size)
 ```
 
-This forces the GA to prioritize valid covers.
-
-### **Area 2: Deviation from target size**
-```
-area2 = -10 * abs(coverSize - TARGET_COVER_SIZE)
-```
-
-This guides the GA to find solutions with exactly 7 nodes (or other target values depending on the graph).
+More vertices selected → more penalty.
 
 ### **Total fitness**
 ```
 fitness = area1 + area2
 ```
 
-The ideal fitness is **0**, which means:
-- all edges are covered
-- coverSize == TARGET_COVER_SIZE
 
-Any negative value indicates a suboptimal solution.
+Interpretation:
+
+✔ primary goal: cover all edges  
+✔ secondary goal: use as few vertices as possible
 
 ---
 
 ## Genetic Operators
 
-### **Selection**
-Elitist selection:
-- The best individual always survives
-- Parents chosen from top of population
+### Selection
+Elitism:
+- the best individual always survives to the next generation
+- parents for crossover are chosen from the top of the population
+---
 
-### **Crossover**
-A **2‑point crossover** swaps segments between two parents.
+### Crossover
+A **two-point crossover** is used:
+```
+[p1 genes] 123|45678|90
+[p2 genes] ABC|DEFGH|IJ
+```
+Result:
+```
+child1 = 123|DEFGH|90
+child2 = ABC|45678|IJ
+```
+
 
 ### **Mutation**
 Simple **bit‑flip** mutation:
@@ -107,9 +117,9 @@ Iteration 6 | fitness = 0.0 | coverSize = 7
 Perfect Vertex Cover (size 7) found at iteration 6
 
 ===== FINAL BEST SOLUTION =====
-Fitness        = 0.0
-Cover size     = 7
-Genes (bits)   = [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]
+Fitness = 0.0
+Cover size = 7
+Genes (bits) = [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0]
 Is valid cover = true
 Execution time = 12 ms
 ```
@@ -131,143 +141,205 @@ Run:
 ```
 java VertexCoverGA
 ```
+---
+
+## How to Use Different Graphs
+
+Place graph files in:
+```
+/resources
+```
+
+Set the input file inside `VertexCoverGA.java`:
+
+```
+static final String GRAPH_FILE = "resources/vc-exact_033.gr";
+```
+The algorithm automatically reads:
+
+- number of vertices
+- number of edges
+- edge list
 
 ---
 
 ##  Notes
 
-- You can swap the graph in `initGraph()` to test other structures.
-- Adjust `TARGET_COVER_SIZE` according to the known optimum.
-- The penalty values can be tuned depending on the difficulty.
+- Fitness function uses two penalty components
+- Selection is elitist
+- Crossover is 2-point
+- Mutation is bit-flip with probability = 1%
+- Genes are binary
+- Graph input is read from .gr files
+- Code supports very large graphs
 
 ---
 
-# Genetic Algorithm for Minimum Vertex Cover — Pseudocode (with Explanations)
-
----------------------------------------------------------
-PSEUDOCODE
----------------------------------------------------------
+# Genetic Algorithm for Minimum Vertex Cover - Pseudocode
 
 FUNCTION GeneticAlgorithm():
 INPUT:
-- populationSize
-- maxIterations
-- mutationProbability
-- targetCoverSize   // e.g., 7
-- graphEdges        // list of (u, v) edges
-- numberOfVertices
+- POPULATION_SIZE
+- MAX_ITERATIONS
+- MUTATION_PROB
+- NUM_VERTICES
+- edges  // list of (u, v)
 
+----------------------------------------------------
+Step 1: Generate initial population
+----------------------------------------------------
+population ← empty list
+FOR i = 1 TO POPULATION_SIZE:
+individual.genes ← random bits of size NUM_VERTICES
+Add individual to population
+
+----------------------------------------------------
+Step 2: Iterate evolutionary process
+----------------------------------------------------
+FOR iter = 1 TO MAX_ITERATIONS:
+
+    ------------------------------------------------
+    Step 2.1: Compute fitness of each individual
+    ------------------------------------------------
+    FOR each individual IN population:
+
+        coverSize ← count of genes == 1
+
+        uncovered ← number of edges where:
+            both endpoints = 0
+
+        area1 = -PENALTY_UNCOVERED * uncovered
+        area2 = -coverSize
+
+        fitness = area1 + area2
+
+    ------------------------------------------------
+    Step 2.2: Sort by fitness descending
+    ------------------------------------------------
+    Sort population by fitness highest to lowest
+
+    elite ← population[0]
+
+    Print iteration + elite fitness + elite coverSize
+
+    ------------------------------------------------
+    Step 2.3: Track global best solution
+    ------------------------------------------------
+    IF elite is a valid vertex cover AND elite.coverSize < bestCoverSize:
+        bestSolution ← copy(elite)
+        bestCoverSize ← elite.coverSize
+
+    ------------------------------------------------
+    Step 2.4: Create new generation with elitism
+    ------------------------------------------------
+    newPopulation ← empty list
+    Add elite to newPopulation
+
+    ------------------------------------------------
+    Step 2.5: Generate the remaining individuals
+    ------------------------------------------------
+    WHILE size(newPopulation) < POPULATION_SIZE:
+
+        parent1 ← population[0]
+        parent2 ← population[1]
+
+        (child1, child2) ← TwoPointCrossover(parent1, parent2)
+
+        Mutate(child1, MUTATION_PROB)
+        Mutate(child2, MUTATION_PROB)
+
+        Add child1 to newPopulation
+        IF size(newPopulation) < POPULATION_SIZE:
+            Add child2 to newPopulation
+
+    population ← newPopulation
+
+----------------------------------------------------
+Step 3: Return result
+----------------------------------------------------
 ```
-
-    // ----------------------------------------------------
-    // Step 1: Generate initial population
-    // ----------------------------------------------------
-    population ← GenerateRandomBitstrings(populationSize, numberOfVertices)
-
-    FOR each iteration FROM 1 TO maxIterations:
-
-        // ------------------------------------------------
-        // Step 2: Evaluate fitness of each individual
-        // ------------------------------------------------
-        FOR each individual IN population:
-            coverSize ← CountOnes(individual)
-            uncoveredEdges ← CountUncoveredEdges(individual, graphEdges)
-
-            // AREA 1: penalize uncovered edges
-            area1 ← -1000 * uncoveredEdges
-
-            // AREA 2: penalize deviation from target cover size
-            area2 ← -10 * ABS(coverSize - targetCoverSize)
-
-            fitness(individual) ← area1 + area2
-
-        // ----------------------------------------------
-        // Step 3: Sort individuals by descending fitness
-        // ----------------------------------------------
-        Sort population by fitness (highest first)
-
-        elite ← population[0]    // the best individual
-
-        PRINT("Iteration", iteration, "fitness =", elite.fitness)
-
-        // ------------------------------------------------
-        // Step 4: Check stopping condition
-        // ------------------------------------------------
-        IF elite.fitness == 0:
-            RETURN elite   // perfect vertex cover found
-
-        // ------------------------------------------------
-        // Step 5: Generate new population (elitism)
-        // ------------------------------------------------
-        newPopulation ← empty list
-        Add elite to newPopulation
-
-        // ------------------------------------------------
-        // Step 6: Fill population with crossover + mutation
-        // ------------------------------------------------
-        WHILE size(newPopulation) < populationSize:
-            parent1 ← population[0]
-            parent2 ← population[1]
-
-            // two-point crossover
-            (child1, child2) ← TwoPointCrossover(parent1, parent2)
-
-            // bit-flip mutation
-            Mutate(child1, mutationProbability)
-            Mutate(child2, mutationProbability)
-
-            Add child1 to newPopulation
-            IF size(newPopulation) < populationSize:
-                Add child2 to newPopulation
-
-        population ← newPopulation
-
-    // ----------------------------------------------------
-    // Step 7: If no perfect solution found, return best
-    // ----------------------------------------------------
+IF bestSolution exists:
+    RETURN bestSolution
+ELSE:
     RETURN population[0]
 ```
 
 
----------------------------------------------------------
-EXPLANATION OF EACH STEP
----------------------------------------------------------
+## Explanation of Each Step (Genetic Algorithm Execution)
 
-1. Initial Population
-    - Create several individuals, each represented as a bitstring of length equal to the number of vertices.
-    - Bit '1' means the vertex is included in the vertex cover.
-    - Bit '0' means the vertex is not selected.
-    - This provides genetic diversity for the algorithm to explore.
+### 1. Initial Population
+- Several individuals are created.
+- Each individual is represented as a bitstring of length equal to the number of vertices.
+- Bit:
+    - `1` → vertex is included in the vertex cover
+    - `0` → vertex is not included
+- This ensures genetic diversity in the search space.
 
-2. Fitness Evaluation
-    - Each individual is evaluated based on two “areas”:
-      AREA 1: uncovered edges (penalized with a large negative value)
-      AREA 2: deviation from the target cover size (penalized with a smaller negative value)
-    - A perfect solution has:
-        * no uncovered edges
-        * coverSize = targetCoverSize
-          -> fitness = 0
+---
 
-3. Sorting Individuals
+### 2. Fitness Evaluation
+Each individual is evaluated based on two penalty components:
+
+#### **Area 1: Uncovered edges**
+- For each edge (u, v):
+    - If both genes are `0`, the edge is not covered.
+- Each uncovered edge adds a large negative penalty to fitness.
+- This ensures solutions that fail to cover edges are heavily penalized.
+
+#### **Area 2: Cover size**
+- The number of `1` bits is counted.
+- The more vertices included, the more negative the penalty.
+- This pushes the algorithm toward smaller covers.
+
+**Priority:**
+1. First: cover all edges
+2. Second: use as few vertices as possible
+
+---
+
+### 3. Sorting Individuals
+- After computing fitness values:
     - The population is sorted in descending order of fitness.
-    - The best individual is chosen as the “elite”.
+- The individual with the highest fitness becomes the **elite**.
+- This is the best candidate for producing offspring.
 
-4. Stopping Condition
-    - If an individual reaches fitness = 0, it means:
-        * all edges are covered
-        * the cover uses exactly the target number of vertices
-    - This is an optimal vertex cover under the defined constraints.
+---
 
-5. Elitism
-    - The elite individual is copied directly into the next generation.
-    - This ensures the best solution is never lost.
+### 4. Tracking Best Valid Solution
+- Even if the elite is not perfect, if it:
+    - correctly covers all edges
+    - and has a smaller cover size than previous best
+- It becomes the new **bestSolution**.
+- This ensures steady progress toward an optimal cover.
 
-6. Crossover and Mutation
-    - Parents are selected (elitist selection).
-    - Two-point crossover combines sections of parent bitstrings.
-    - Mutation flips random bits (0→1, 1→0) with small probability.
-    - This introduces diversity and prevents premature convergence.
+---
 
-7. Final Result
-    - If no perfect solution is found after all iterations,
-      the best individual seen so far is returned.
+### 5. Elitism
+- The elite individual is directly copied into the next generation.
+- This guarantees:
+    - the current best solution will never be lost
+    - the evolutionary process cannot regress
+
+---
+
+### 6. Crossover and Mutation
+- The other individuals of the next generation are created using:
+    - **Two-point crossover**
+    - **Bit-flip mutation** (probability 0.01)
+- These operations:
+    - introduce genetic diversity
+    - allow exploration of new candidate solutions
+    - reduce premature convergence of the algorithm
+
+---
+
+### 7. Final Result
+- After all iterations are completed:
+    - If at least one valid vertex cover was discovered during the process:
+        - the algorithm returns the smallest valid cover found.
+    - Otherwise:
+        - it returns the individual with the highest overall fitness,
+          even if not a complete valid cover.
+
+---
+

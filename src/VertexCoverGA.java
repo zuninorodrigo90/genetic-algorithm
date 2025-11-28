@@ -3,33 +3,63 @@ import java.util.*;
 public class VertexCoverGA {
 
     // ====== GA PARAMETERS ======
-    static final int NUM_VERTICES = 15;
     static final int POPULATION_SIZE = 40;
     static final int MAX_ITERATIONS = 50;
     static final double MUTATION_PROB = 0.01;
-    static final int TARGET_COVER_SIZE = 7;   // optimum = 7
-    static final int PENALTY_UNCOVERED = 1000;
-    static final int PENALTY_DEVIATION = 10;
 
+    static final String GRAPH_FILE = "resources/vc-exact_033.gr";
+    static int NUM_VERTICES = 0;
+    static final int PENALTY_UNCOVERED = 10000;
+    static int bestCoverSize = Integer.MAX_VALUE;
     static Individual bestSolution = null;
     static List<Edge> edges = new ArrayList<>();
 
     // ====== EDGE CLASS ======
+
+    /**
+     * Represents an undirected edge between two vertices (u, v).
+     */
     static class Edge {
         int u, v;
-        Edge(int u, int v) { this.u = u; this.v = v; }
+
+        /**
+         * Creates an edge connecting vertex u and vertex v.
+         *
+         * @param u first vertex (0-based index)
+         * @param v second vertex (0-based index)
+         */
+        Edge(int u, int v) {
+            this.u = u;
+            this.v = v;
+        }
     }
 
     // ====== INDIVIDUAL ======
+
+    /**
+     * Represents an individual in the genetic algorithm,
+     * storing its genes (vertex selections), fitness, and cover size.
+     */
     static class Individual {
         List<Integer> genes; // bits: 1 = in cover, 0 = not in cover
         double fitness;
         int coverSize;
 
+        /**
+         * Creates a new individual with the given gene sequence.
+         *
+         * @param g list of gene values (0 or 1)
+         */
         Individual(List<Integer> g) {
             this.genes = new ArrayList<>(g);
         }
 
+        /**
+         * Produces a deep copy of the individual,
+         * duplicating its genes, fitness, and cover size.
+         *
+         * @return independent copy of this individual
+         */
         Individual copy() {
             Individual c = new Individual(new ArrayList<>(this.genes));
             c.fitness = this.fitness;
@@ -40,14 +70,22 @@ public class VertexCoverGA {
 
 
     // ===================== MAIN ======================
-    public static void main(String[] args) {
 
-        initGraph();  // build 5×3 grid graph
+    /**
+     * Runs the vertex cover genetic algorithm:
+     * loads the graph, creates the population,
+     * evolves it through crossover and mutation,
+     * and outputs the best resulting vertex cover.
+     *
+     */
+    static void main(String[] args) {
+
+        loadGraphFromFile(GRAPH_FILE);
 
         long start = System.currentTimeMillis();
 
         List<Individual> population =
-                generateInitialPopulation(POPULATION_SIZE);
+                generateInitialPopulation();
 
         for (int iter = 1; iter <= MAX_ITERATIONS; iter++) {
 
@@ -60,20 +98,23 @@ public class VertexCoverGA {
             }
 
             // 2) Sort by fitness DESC
-            population.sort((a,b) -> Double.compare(b.fitness, a.fitness));
+            population.sort((a, b) -> Double.compare(b.fitness, a.fitness));
 
             // elite = best individual this generation
             Individual elite = population.getFirst();
 
-            System.out.println("Iteration " + iter +
-                    " | fitness = " + elite.fitness +
-                    " | coverSize = " + elite.coverSize);
+            if (iter % 100 == 0 || iter == 1 || iter == MAX_ITERATIONS) { //print every 100 iterations
+                System.out.println("Iteration " + iter +
+                        " | fitness = " + elite.fitness +
+                        " | coverSize = " + elite.coverSize +
+                        " | validCover = " + isValidCover(elite));
+            }
 
-            // 3) STOP when fitness == 0 (perfect vertex cover of size 7)
-            if (elite.fitness == 0) {
+
+            // 3) Update the best solution if cover is valid and smaller
+            if (isValidCover(elite) && elite.coverSize < bestCoverSize) {
+                bestCoverSize = elite.coverSize;
                 bestSolution = elite.copy();
-                System.out.println("Perfect Vertex Cover (size 7) found at iteration " + iter);
-                break;
             }
 
             // 4) New generation (elitism)
@@ -98,9 +139,9 @@ public class VertexCoverGA {
             population = newPop;
         }
 
-        // If optimum never reached, pick the best at the end
+        // If no valid cover was found, fallback to best by fitness
         if (bestSolution == null) {
-            population.sort((a,b)->Double.compare(b.fitness,a.fitness));
+            population.sort((a, b) -> Double.compare(b.fitness, a.fitness));
             bestSolution = population.getFirst().copy();
         }
 
@@ -116,33 +157,51 @@ public class VertexCoverGA {
     }
 
 
-
     // ===================== GRAPH ======================
-    static void initGraph() {
+    /**
+     * Loads the graph from a .gr file (PACE challenge format),
+     * reading the number of vertices and all edges.
+     *
+     * @param filePath location of the graph file
+     */
+    static void loadGraphFromFile(String filePath) {
         edges.clear();
 
-        // Horizontal edges (5 rows × 2)
-        edges.add(new Edge(0,1));  edges.add(new Edge(1,2));
-        edges.add(new Edge(3,4));  edges.add(new Edge(4,5));
-        edges.add(new Edge(6,7));  edges.add(new Edge(7,8));
-        edges.add(new Edge(9,10)); edges.add(new Edge(10,11));
-        edges.add(new Edge(12,13)); edges.add(new Edge(13,14));
+        try (Scanner sc = new Scanner(new java.io.File(filePath))) {
+            while (sc.hasNext()) {
+                String token = sc.next();
 
-        // Vertical edges (3 columns × 4)
-        edges.add(new Edge(0,3));   edges.add(new Edge(3,6));
-        edges.add(new Edge(6,9));   edges.add(new Edge(9,12));
-
-        edges.add(new Edge(1,4));   edges.add(new Edge(4,7));
-        edges.add(new Edge(7,10));  edges.add(new Edge(10,13));
-
-        edges.add(new Edge(2,5));   edges.add(new Edge(5,8));
-        edges.add(new Edge(8,11));  edges.add(new Edge(11,14));
+                if (token.equals("c")) {
+                    sc.nextLine();
+                } else if (token.equals("p")) {
+                    // p td 200 884
+                    sc.next(); // td
+                    NUM_VERTICES = sc.nextInt(); // number of vertices
+                    int numEdges = sc.nextInt(); // number of edges (not mandatory to store)
+                } else {
+                    // otherwise it's an edge
+                    int u = Integer.parseInt(token) - 1;  // convert to 0-based
+                    int v = sc.nextInt() - 1;
+                    edges.add(new Edge(u, v));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
     }
-
 
     // ===================== FITNESS AREAS ======================
 
     // Area 1: penalizes uncovered edges
+
+    /**
+     * Computes the penalty for uncovered edges.
+     * Each edge whose both endpoints are 0 increases the penalty.
+     *
+     * @param ind individual to evaluate
+     * @return negative score proportional to number of uncovered edges
+     */
     static double area1(Individual ind) {
         int uncovered = 0;
         for (Edge e : edges) {
@@ -155,14 +214,30 @@ public class VertexCoverGA {
         return -PENALTY_UNCOVERED * uncovered;
     }
 
-    // Area 2: penalizes cover size different from 7
+    // Area 2: penalizes the size of the cover directly
+
+    /**
+     * Penalizes the size of the cover.
+     * The more selected vertices (1s), the larger the penalty.
+     *
+     * @param ind individual to evaluate
+     * @return negative value equal to the number of vertices in the cover
+     */
     static double area2(Individual ind) {
         int size = countOnes(ind);
-        return -PENALTY_DEVIATION * Math.abs(size - TARGET_COVER_SIZE);
+        return -size; // smaller cover: less negative fitness
     }
 
 
     // ===================== VALIDATION ======================
+
+    /**
+     * Checks if the individual is a valid vertex cover.
+     * A cover is valid if every edge has at least one endpoint with gene = 1.
+     *
+     * @param ind individual to evaluate
+     * @return true if all edges are covered, false otherwise
+     */
     static boolean isValidCover(Individual ind) {
         for (Edge e : edges) {
             if (ind.genes.get(e.u) == 0 && ind.genes.get(e.v) == 0)
@@ -173,6 +248,13 @@ public class VertexCoverGA {
 
 
     // ===================== UTILITIES ======================
+
+    /**
+     * Counts how many vertices are included in the cover (genes = 1).
+     *
+     * @param ind individual to evaluate
+     * @return number of genes with value 1
+     */
     static int countOnes(Individual ind) {
         int c = 0;
         for (int g : ind.genes) if (g == 1) c++;
@@ -181,6 +263,15 @@ public class VertexCoverGA {
 
 
     // ===================== CROSSOVER ======================
+
+    /**
+     * Performs 2-point crossover between two parents, producing two children.
+     * Genes between two random crossover points are swapped.
+     *
+     * @param p1 first parent
+     * @param p2 second parent
+     * @return array of two offspring individuals
+     */
     static Individual[] crossover2Point(Individual p1, Individual p2) {
         Random r = new Random();
 
@@ -201,6 +292,13 @@ public class VertexCoverGA {
 
 
     // ===================== MUTATION ======================
+
+    /**
+     * Applies mutation to an individual by flipping each gene with a given probability.
+     *
+     * @param ind  individual to mutate
+     * @param prob mutation probability for each gene
+     */
     static void mutate(Individual ind, double prob) {
         Random r = new Random();
         for (int i = 0; i < ind.genes.size(); i++) {
@@ -211,11 +309,17 @@ public class VertexCoverGA {
 
 
     // ===================== INITIAL POPULATION ======================
-    static List<Individual> generateInitialPopulation(int size) {
+
+    /**
+     * Creates the initial population with random gene assignments (0 or 1).
+     *
+     * @return list of randomly generated individuals
+     */
+    static List<Individual> generateInitialPopulation() {
         Random r = new Random();
         List<Individual> pop = new ArrayList<>();
 
-        for (int i = 0; i < size; i++) {
+        for (int i = 0; i < VertexCoverGA.POPULATION_SIZE; i++) {
             List<Integer> genes = new ArrayList<>();
             for (int j = 0; j < NUM_VERTICES; j++)
                 genes.add(r.nextInt(2)); // random bit
